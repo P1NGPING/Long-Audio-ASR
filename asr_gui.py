@@ -66,10 +66,12 @@ class AsrApp(DnDCTk):
         self.worker = None
         self.stop_requested = False
         self.output_file = self.config_data.get("output_file", "meeting_transcript.md")
+        self.save_after_id = None
 
         self.vars = {}
         self.create_widgets()
         self.load_vars(self.config_data)
+        self.bind_auto_save()
         self.register_drop_target(self)
         self.after(100, self.poll_events)
 
@@ -195,14 +197,39 @@ class AsrApp(DnDCTk):
             else:
                 var.set("None" if value is None else str(value))
 
-    def collect_config(self):
+    def collect_config(self, strict=True):
         config = {}
         for key, var in self.vars.items():
             value = var.get()
             if key in ("segment_length_min", "overlap_seconds"):
-                value = float(value)
+                try:
+                    value = float(value)
+                except ValueError as e:
+                    if strict:
+                        raise ValueError(f"{key} 必须是数字") from e
+                    return None
             config[key] = value
         return config
+
+    def bind_auto_save(self):
+        for var in self.vars.values():
+            var.trace_add("write", self.schedule_config_save)
+
+    def schedule_config_save(self, *_):
+        if self.save_after_id:
+            self.after_cancel(self.save_after_id)
+        self.save_after_id = self.after(400, self.auto_save_config)
+
+    def auto_save_config(self):
+        self.save_after_id = None
+        config = self.collect_config(strict=False)
+        if config is None:
+            return
+        try:
+            save_config(config)
+            self.config_data = config
+        except Exception as e:
+            self.log(f"[Config] 自动保存失败: {e}")
 
     def choose_input_file(self):
         path = filedialog.askopenfilename(
@@ -249,9 +276,11 @@ class AsrApp(DnDCTk):
 
         try:
             config = self.collect_config()
-            save_config(config)
         except Exception as e:
             messagebox.showerror("配置错误", str(e))
+            return
+        if config is None:
+            messagebox.showerror("配置错误", "配置保存失败")
             return
 
         self.output_file = config["output_file"]

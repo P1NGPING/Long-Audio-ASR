@@ -23,9 +23,9 @@ DEFAULT_CONFIG = {
     "asr_reasoning_effort": "None",
     "format_reasoning_effort": "None",
     "input_file": "audio.aac",
-    "output_file": "meeting_transcript.md",
+    "output_file": "transcript.md",
     "temp_dir": "temp_audio_segments",
-    "segment_length_min": 2,
+    "segment_length_min": 5,
     "overlap_seconds": 5,
     "enable_markdown_format": True,
     "enable_resume": True,
@@ -76,6 +76,7 @@ FORMAT_PROMPT = """
 2. 当话题发生明显切换时，添加 `##` 二级标题概括该部分主题。
 3. 当同一大话题下有子话题切换时，使用 `###` 三级标题。
 4. 保持原文的措辞不变，不要改写、润色或总结。
+5. 去除语音片段之间多余的标点符号，比如句号，省略号等。
 
 # Constraints
 1. **只做分段和加标题**：不要添加原文没有的信息、不要评论、不要总结。

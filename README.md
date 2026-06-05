@@ -71,22 +71,24 @@ asr_config.json
 {
   "asr_api_key": "",
   "asr_base_url": "",
-  "asr_model": "",
+  "asr_model": "gemini-3.1-pro-preview",
   "asr_reasoning_effort": "None",
   "format_api_key": "",
   "format_base_url": "",
   "format_model": "",
   "format_reasoning_effort": "None",
   "input_file": "audio.aac",
-  "output_file": "meeting_transcript.md",
+  "output_file": "transcript.md",
   "temp_dir": "temp_audio_segments",
-  "segment_length_min": 2,
+  "segment_length_min": 5,
   "overlap_seconds": 5,
   "enable_markdown_format": true,
   "enable_resume": true,
   "clear_resume_cache": false
 }
 ```
+
+推荐模型使用 `gemini-3.1-pro-preview`，推荐片段长度为 `5` 分钟。较长片段可以减少分段数量和 overlap 重复，但如果接口对单次音频长度或请求体大小有限制，可以适当调低 `segment_length_min`。
 
 ## 断点继续
 
