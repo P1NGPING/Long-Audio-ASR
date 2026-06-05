@@ -1,0 +1,18 @@
+{
+  "asr_api_key": "",
+  "asr_base_url": "",
+  "asr_model": "",
+  "asr_reasoning_effort": "None",
+  "format_api_key": "",
+  "format_base_url": "",
+  "format_model": "",
+  "format_reasoning_effort": "None",
+  "enable_markdown_format": true,
+  "input_file": "audio.aac",
+  "output_file": "meeting_transcript.md",
+  "temp_dir": "temp_audio_segments",
+  "segment_length_min": 2,
+  "overlap_seconds": 5,
+  "enable_resume": true,
+  "clear_resume_cache": false
+}

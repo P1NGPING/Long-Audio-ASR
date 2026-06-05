@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets and local config
+asr_config.json
+*.key
+*.pem
+*.env
+.env
+.env.*
+
+# Generated audio/video/transcript artifacts
+temp_audio_segments/
+*.mp3
+*.wav
+*.aac
+*.m4a
+*.flac
+*.ogg
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.webm
+*.flv
+*.wmv
+*.m4v
+*_transcript.md
+meeting_transcript.md
+meeting_summary_log.txt
+
+# Logs and runtime state
+*.log
+*.tmp
+*.bak
+*.old.*
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
