@@ -178,8 +178,14 @@ class AsrApp(DnDCTk):
     def add_option(self, parent, label, key, row):
         ctk.CTkLabel(parent, text=label, font=FONT_BODY).grid(row=row, column=0, padx=(8, 14), pady=7, sticky="w")
         self.vars[key] = ctk.StringVar()
-        option = ctk.CTkOptionMenu(parent, variable=self.vars[key], values=["None", "low", "medium", "high"], font=FONT_BODY, dropdown_font=FONT_BODY)
+        option = ctk.CTkComboBox(parent, variable=self.vars[key], values=["None", "low", "medium", "high", "自定义"], font=FONT_BODY, dropdown_font=FONT_BODY)
+        option.configure(command=lambda value, var=self.vars[key], widget=option: self.handle_custom_option(var, widget, value))
         option.grid(row=row, column=1, columnspan=2, padx=(0, 8), pady=7, sticky="ew")
+
+    def handle_custom_option(self, var, widget, value):
+        if value == "自定义":
+            var.set("")
+            widget.focus_set()
 
     def add_file_row(self, parent, label, key, row, command):
         ctk.CTkLabel(parent, text=label, font=FONT_BODY).grid(row=row, column=0, padx=(8, 14), pady=7, sticky="w")

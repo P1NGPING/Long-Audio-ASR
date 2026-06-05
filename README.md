@@ -2,6 +2,8 @@
 
 一个带 GUI 的长音频/视频 ASR 转写工具。它会把长媒体文件切成带 overlap 的音频片段，逐段调用多模态模型转写，再可选调用另一个文本模型将完整转写整理成 Markdown 语义段落。
 
+![Long Audio ASR GUI](assets/gui-screenshot.png)
+
 ## 功能
 
 - 支持音频输入：`.aac`, `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`
@@ -88,7 +90,7 @@ asr_config.json
 }
 ```
 
-推荐模型使用 `gemini-3.1-pro-preview`，推荐片段长度为 `5` 分钟。较长片段可以减少分段数量和 overlap 重复，但如果接口对单次音频长度或请求体大小有限制，可以适当调低 `segment_length_min`。
+推荐模型使用 `gemini-3.1-pro-preview`，推荐片段长度为 `5` 分钟。较长片段可以减少分段数量和 overlap 重复，但太长会导致识别准确度下降。
 
 ## 断点继续
 
