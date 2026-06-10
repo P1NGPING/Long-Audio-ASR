@@ -130,15 +130,19 @@ class AsrApp(DnDCTk):
         section4.grid(row=15, column=0, columnspan=3, sticky="w", pady=(24, 8))
         self.add_entry(left, "片段分钟", "segment_length_min", 16)
         self.add_entry(left, "Overlap 秒", "overlap_seconds", 17)
+        self.vars["enable_parallel_asr"] = ctk.BooleanVar(value=False)
+        parallel_switch = ctk.CTkSwitch(left, text="启用并行 ASR", variable=self.vars["enable_parallel_asr"], font=FONT_BODY)
+        parallel_switch.grid(row=18, column=1, columnspan=2, sticky="w", pady=8)
+        self.parallel_interval_widgets = self.add_entry(left, "并行提交间隔秒", "parallel_submit_interval_seconds", 19)
 
         section5 = ctk.CTkLabel(left, text="断点继续", font=FONT_SECTION)
-        section5.grid(row=18, column=0, columnspan=3, sticky="w", pady=(24, 8))
+        section5.grid(row=20, column=0, columnspan=3, sticky="w", pady=(24, 8))
         self.vars["enable_resume"] = ctk.BooleanVar(value=True)
         resume_switch = ctk.CTkSwitch(left, text="启用断点继续", variable=self.vars["enable_resume"], font=FONT_BODY)
-        resume_switch.grid(row=19, column=1, columnspan=2, sticky="w", pady=8)
+        resume_switch.grid(row=21, column=1, columnspan=2, sticky="w", pady=8)
         self.vars["clear_resume_cache"] = ctk.BooleanVar(value=False)
         clear_switch = ctk.CTkSwitch(left, text="清除本任务缓存后重新开始", variable=self.vars["clear_resume_cache"], font=FONT_BODY)
-        clear_switch.grid(row=20, column=1, columnspan=2, sticky="w", pady=8)
+        clear_switch.grid(row=22, column=1, columnspan=2, sticky="w", pady=8)
 
         controls = ctk.CTkFrame(right)
         controls.grid(row=0, column=0, padx=18, pady=18, sticky="ew")
@@ -170,10 +174,12 @@ class AsrApp(DnDCTk):
         self.register_drop_target(self.log_box)
 
     def add_entry(self, parent, label, key, row, show=None):
-        ctk.CTkLabel(parent, text=label, font=FONT_BODY).grid(row=row, column=0, padx=(8, 14), pady=7, sticky="w")
+        label_widget = ctk.CTkLabel(parent, text=label, font=FONT_BODY)
+        label_widget.grid(row=row, column=0, padx=(8, 14), pady=7, sticky="w")
         self.vars[key] = ctk.StringVar()
         entry = ctk.CTkEntry(parent, textvariable=self.vars[key], show=show, font=FONT_BODY)
         entry.grid(row=row, column=1, columnspan=2, padx=(0, 8), pady=7, sticky="ew")
+        return label_widget, entry
 
     def add_option(self, parent, label, key, row):
         ctk.CTkLabel(parent, text=label, font=FONT_BODY).grid(row=row, column=0, padx=(8, 14), pady=7, sticky="w")
@@ -202,12 +208,13 @@ class AsrApp(DnDCTk):
                 var.set(bool(value))
             else:
                 var.set("None" if value is None else str(value))
+        self.update_parallel_interval_visibility()
 
     def collect_config(self, strict=True):
         config = {}
         for key, var in self.vars.items():
             value = var.get()
-            if key in ("segment_length_min", "overlap_seconds"):
+            if key in ("segment_length_min", "overlap_seconds", "parallel_submit_interval_seconds"):
                 try:
                     value = float(value)
                 except ValueError as e:
@@ -220,6 +227,15 @@ class AsrApp(DnDCTk):
     def bind_auto_save(self):
         for var in self.vars.values():
             var.trace_add("write", self.schedule_config_save)
+        self.vars["enable_parallel_asr"].trace_add("write", self.update_parallel_interval_visibility)
+
+    def update_parallel_interval_visibility(self, *_):
+        if self.vars["enable_parallel_asr"].get():
+            for widget in self.parallel_interval_widgets:
+                widget.grid()
+        else:
+            for widget in self.parallel_interval_widgets:
+                widget.grid_remove()
 
     def schedule_config_save(self, *_):
         if self.save_after_id:

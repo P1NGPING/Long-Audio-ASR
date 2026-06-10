@@ -83,14 +83,16 @@ asr_config.json
   "output_file": "transcript.md",
   "temp_dir": "temp_audio_segments",
   "segment_length_min": 5,
-  "overlap_seconds": 5,
+  "overlap_seconds": 10,
+  "enable_parallel_asr": false,
+  "parallel_submit_interval_seconds": 0,
   "enable_markdown_format": true,
   "enable_resume": true,
   "clear_resume_cache": false
 }
 ```
 
-推荐模型使用 `gemini-3.1-pro-preview`，推荐片段长度为 `5` 分钟。较长片段可以减少分段数量和 overlap 重复，但太长会导致识别准确度下降。
+推荐模型使用 `gemini-3.1-pro-preview`，推荐片段长度为 `5` 分钟。较长片段可以减少分段数量和 overlap 重复，但太长会导致识别准确度下降。默认使用串行 ASR，会把上一段转写末尾提交给下一段辅助去除 overlap 重复；启用 `enable_parallel_asr` 后会并行提交各片段，并使用不依赖上下文的独立 ASR prompt。`parallel_submit_interval_seconds` 用于控制并行提交 ASR 请求时相邻请求的启动间隔，接口有 rate limit 时可调大。
 
 ## 断点继续
 
