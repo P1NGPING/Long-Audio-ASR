@@ -30,18 +30,21 @@ DEFAULT_CONFIG = {
     "overlap_seconds": 10,
     "enable_parallel_asr": False,
     "parallel_submit_interval_seconds": 0,
-    "enable_markdown_format": True,
+    "enable_postprocess": True,
+    "postprocess_preset": "",
     "enable_resume": True,
     "clear_resume_cache": False,
 }
 
 CONFIG_FILE = "asr_config.json"
+PRESETS_FILE = "asr_presets.json"
+DEFAULT_PRESET_NAME = "默认 Markdown 修整"
 AUDIO_EXTENSIONS = {".aac", ".mp3", ".wav", ".m4a", ".flac", ".ogg"}
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv", ".wmv", ".m4v"}
 STATE_DIR_NAME = ".asr_state"
 MEDIA_STATE_VERSION = "media-v1"
 ASR_STATE_VERSION = "asr-v1"
-FORMAT_STATE_VERSION = "format-v1"
+FORMAT_STATE_VERSION = "format-v2"
 
 
 SYSTEM_PROMPT = """
@@ -91,7 +94,7 @@ PARALLEL_SYSTEM_PROMPT = """
 """
 
 
-FORMAT_PROMPT = """
+DEFAULT_FORMAT_PROMPT = """
 # Role
 
 你是一个专业的转写文本整理编辑。你的任务是将一段连续的 ASR 转写文本整理为结构清晰、语义连贯的 Markdown 文档。
@@ -266,23 +269,25 @@ def compute_asr_job_id(config, media_job_id):
     return sha256_text(json.dumps(signature, ensure_ascii=False, sort_keys=True))
 
 
-def compute_format_job_id(config, asr_job_id):
+def compute_format_job_id(config, asr_job_id, preset_name=None, prompt_text=None):
     signature = {
         "version": FORMAT_STATE_VERSION,
         "asr_job_id": asr_job_id,
-        "enable_markdown_format": bool(config.get("enable_markdown_format", True)),
+        "enable_postprocess": bool(config.get("enable_postprocess", True)),
         "format_base_url": config.get("format_base_url"),
         "format_model": config.get("format_model"),
         "format_reasoning_effort": normalize_reasoning_effort(config.get("format_reasoning_effort")),
+        "preset_name": preset_name,
+        "prompt_hash": sha256_text(prompt_text) if prompt_text else None,
     }
     return sha256_text(json.dumps(signature, ensure_ascii=False, sort_keys=True))
 
 
-def get_state_paths(config):
+def get_state_paths(config, preset_name=None, prompt_text=None):
     state_root = os.path.join(config["temp_dir"], STATE_DIR_NAME)
     media_job_id = compute_media_job_id(config)
     asr_job_id = compute_asr_job_id(config, media_job_id)
-    format_job_id = compute_format_job_id(config, asr_job_id)
+    format_job_id = compute_format_job_id(config, asr_job_id, preset_name, prompt_text)
     return {
         "state_root": state_root,
         "media_job_id": media_job_id,
@@ -701,13 +706,13 @@ def run_parallel_transcription_jobs(asr_config, segments_to_process, config, on_
     return submitted_count == len(segments_to_process) and not had_error
 
 
-def format_transcript_markdown(client, format_config, raw_text, on_log=None):
+def format_transcript_markdown(client, format_config, raw_text, system_prompt, on_log=None):
     if not raw_text.strip():
         return raw_text
 
-    _log("\n[Format] 正在对完整转写文本做语义分段和 Markdown 格式化...", on_log)
+    _log("\n[Postprocess] 正在进行输出后处理...", on_log)
     messages = [
-        {"role": "system", "content": FORMAT_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"以下是完整的转写文本，请整理为 Markdown：\n\n{raw_text}"},
     ]
     completion = client.chat.completions.create(**completion_params(format_config, messages))
@@ -873,7 +878,7 @@ def transcribe_segments_with_resume(client, asr_config, segments, config, paths,
     return raw_text, is_complete
 
 
-def format_markdown_with_resume(client, format_config, raw_text, config, paths, on_log=None):
+def format_markdown_with_resume(client, format_config, raw_text, system_prompt, config, paths, on_log=None):
     format_dir = make_dirs(
         paths["format_dir"],
         on_log,
@@ -884,11 +889,11 @@ def format_markdown_with_resume(client, format_config, raw_text, config, paths, 
     formatted_path = os.path.join(format_dir, "formatted_transcript.md")
 
     if file_exists(formatted_path):
-        _log(f"[Resume] 复用已完成的 Markdown 修整结果: {formatted_path}", on_log)
+        _log(f"[Resume] 复用已完成的输出后处理结果: {formatted_path}", on_log)
         with open(formatted_path, "r", encoding="utf-8") as f:
             return f.read().strip()
 
-    formatted_text = format_transcript_markdown(client, format_config, raw_text, on_log)
+    formatted_text = format_transcript_markdown(client, format_config, raw_text, system_prompt, on_log)
     atomic_write_text(formatted_path, formatted_text.strip() + "\n")
     atomic_write_json(format_state_path, {
         "version": FORMAT_STATE_VERSION,
@@ -914,10 +919,10 @@ def validate_config(config):
         if not str(config.get(key, "")).strip():
             raise ValueError(f"缺少配置: {key}")
 
-    if config.get("enable_markdown_format", True):
+    if config.get("enable_postprocess", True):
         for key in ["format_api_key", "format_base_url", "format_model"]:
             if not str(config.get(key, "")).strip():
-                raise ValueError(f"启用 Markdown 语义分段时必须填写 {key}")
+                raise ValueError(f"启用输出后处理时必须填写 {key}")
 
     if not os.path.exists(config["input_file"]):
         raise FileNotFoundError(f"输入文件不存在: {config['input_file']}")
@@ -932,8 +937,18 @@ def validate_config(config):
 
 
 def run_asr_job(config, on_log=None, on_progress=None, should_stop=None):
+    presets_data = load_presets()
+    preset_name, prompt_text = get_selected_prompt(config, presets_data)
+    config = dict(config)
+    config["postprocess_preset"] = preset_name
+    prompt_text = prompt_text or ""
+    empty_prompt_disables_postprocess = bool(config.get("enable_postprocess", True)) and not prompt_text.strip()
+    if empty_prompt_disables_postprocess:
+        config["enable_postprocess"] = False
     validate_config(config)
-    paths = get_state_paths(config)
+    if empty_prompt_disables_postprocess:
+        _log(f"[Postprocess] preset「{preset_name}」prompt 为空，已跳过输出后处理。", on_log)
+    paths = get_state_paths(config, preset_name, prompt_text)
     use_resume = bool(config.get("enable_resume", True))
 
     asr_config = ModelConfig(
@@ -1035,19 +1050,19 @@ def run_asr_job(config, on_log=None, on_progress=None, should_stop=None):
             raw_text = "\n".join(t.strip() for t in all_transcripts if t.strip())
             asr_complete = len(all_transcripts) == len(audio_segments)
 
-    if config.get("enable_markdown_format", True) and raw_text.strip() and asr_complete and not (should_stop and should_stop()):
+    if config.get("enable_postprocess", True) and raw_text.strip() and asr_complete and not (should_stop and should_stop()):
         try:
             format_client = make_client(format_config)
             if use_resume:
-                formatted_text = format_markdown_with_resume(format_client, format_config, raw_text, config, paths, on_log)
+                formatted_text = format_markdown_with_resume(format_client, format_config, raw_text, prompt_text, config, paths, on_log)
             else:
-                formatted_text = format_transcript_markdown(format_client, format_config, raw_text, on_log)
+                formatted_text = format_transcript_markdown(format_client, format_config, raw_text, prompt_text, on_log)
         except Exception as e:
-            _log(f"[API Error] Markdown 格式化失败，将使用原始文本: {e}", on_log)
+            _log(f"[API Error] 输出后处理失败，将使用原始文本: {e}", on_log)
             formatted_text = raw_text
     else:
         if raw_text.strip() and not asr_complete:
-            _log("[Resume] ASR 尚未完整完成，暂不进行 Markdown 修整。", on_log)
+            _log("[Resume] ASR 尚未完整完成，暂不进行输出后处理。", on_log)
         formatted_text = raw_text
 
     write_final_output_with_resume(formatted_text, config["output_file"], on_log)
@@ -1077,6 +1092,67 @@ def migrate_legacy_config(config):
         config.setdefault("format_base_url", base_url)
     config.pop("api_key", None)
     config.pop("base_url", None)
+
+    if "enable_markdown_format" in config:
+        config["enable_postprocess"] = bool(config.get("enable_markdown_format", True))
+    config.pop("enable_markdown_format", None)
+
+
+def _default_presets_data():
+    return {
+        "presets": [
+            {
+                "name": DEFAULT_PRESET_NAME,
+                "prompt": DEFAULT_FORMAT_PROMPT,
+            }
+        ],
+        "selected": DEFAULT_PRESET_NAME,
+    }
+
+
+def load_presets(presets_file=PRESETS_FILE):
+    if os.path.exists(presets_file):
+        try:
+            with open(presets_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and isinstance(data.get("presets"), list) and data["presets"]:
+                data.setdefault("selected", data["presets"][0].get("name", ""))
+                return data
+        except Exception:
+            pass
+    data = _default_presets_data()
+    try:
+        atomic_write_json(presets_file, data)
+    except Exception:
+        pass
+    return data
+
+
+def save_presets(data, presets_file=PRESETS_FILE):
+    atomic_write_json(presets_file, data)
+
+
+def get_selected_prompt(config, presets_data):
+    """根据 config 中的 postprocess_preset 在 presets_data 中查找，返回 (preset_name, prompt_text)。"""
+    presets = presets_data.get("presets") or []
+    desired = config.get("postprocess_preset") or presets_data.get("selected") or ""
+
+    selected = None
+    for item in presets:
+        if item.get("name") == desired:
+            selected = item
+            break
+    if selected is None and presets:
+        selected = presets[0]
+
+    if selected is None:
+        return DEFAULT_PRESET_NAME, DEFAULT_FORMAT_PROMPT
+
+    name = selected.get("name") or DEFAULT_PRESET_NAME
+    prompt = selected.get("prompt", "")
+    if prompt is None:
+        prompt = ""
+    return name, prompt
 
 
 def main():

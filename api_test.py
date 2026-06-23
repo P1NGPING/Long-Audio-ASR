@@ -18,7 +18,7 @@ def test_api():
         api_key = config["format_api_key"]
         base_url = config["format_base_url"]
         model = config["format_model"]
-        label = "Markdown 修整"
+        label = "输出后处理"
 
     client = OpenAI(api_key=api_key, base_url=base_url)
 

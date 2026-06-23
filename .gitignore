@@ -16,6 +16,7 @@ env/
 
 # Secrets and local config
 asr_config.json
+asr_presets.json
 *.key
 *.pem
 *.env
